@@ -1,0 +1,145 @@
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import Billing from './routes/Billings.mjs';
+
+const app = express();
+const PORT = 3000;
+
+app.use(express.json());
+app.use(cors());
+app.use("/api/billings", Billing);
+
+mongoose.connect('mongodb://localhost:27017/billing-system', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+//end server
+//
+
+**
+import mongoose from "mongoose";
+const BillingSchema = new mongoose.Schema({
+    item: String,
+  amount: Number,
+});
+export default mongoose.model("BillingSchema", BillingSchema);
+//end model schema
+//
+
+
+**
+import express from 'express';
+import BillingSchema from '../models/BillingSchema.mjs';
+
+const Billing = express.Router();
+Billing.post('/', async (req, res) => {
+    const billing = new BillingSchema(req.body);
+    await billing.save();
+    res.status(201).send(billing);
+});
+
+// Get all billing entries
+Billing.get('/', async (req, res) => {
+    const billings = await BillingSchema.find();
+    res.send(billings);
+});
+
+// Delete a billing entry by ID
+Billing.delete('/:id', async (req, res) => {
+    try {
+        const billing = await BillingSchema.findByIdAndDelete(req.params.id);
+        if (!billing) {
+            return res.status(404).send({ message: 'Billing entry not found' });
+        }
+        res.send({ message: 'Billing entry deleted successfully' });
+    } catch (error) {
+        res.status(500).send({ message: 'Error deleting billing entry' });
+    }
+});
+export default Billing;
+//end apis
+//
+
+**
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import './App.css';
+
+const App = () => {
+  const [billings, setBillings] = useState([]);
+  const [item, setItem] = useState('');
+  const [amount, setAmount] = useState('');
+
+  useEffect(() => {
+    setTimeout(()=>{
+      fetchBillings();
+    },1000);
+  }, []);
+  const fetchBillings = async () => {
+    const response = await axios.get('http://localhost:3000/api/billings');
+    setBillings(response.data);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const newBilling = { item, amount: Number(amount) };
+    await axios.post('http://localhost:3000/api/billings', newBilling);
+    setBillings([...billings, newBilling]);
+    setItem('');
+    setAmount('');
+    fetchBillings();
+  };
+
+  const handleDelete = async (id) => {
+    await axios.delete(`http://localhost:3000/api/billings/${id}`);
+    setBillings(billings.filter(billing => billing._id !== id)); // Update local state
+    fetchBillings();
+  };
+
+  // Calculate total items and total price
+  const totalItems = billings.length;
+  const totalPrice = billings.reduce((total, billing) => total + billing.amount, 0);
+
+  return (
+    <div>
+      <h1>Billing System</h1>
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          value={item}
+          onChange={(e) => setItem(e.target.value)}
+          placeholder="Item"
+          required
+        />
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Amount"
+          required
+        />
+        <button type="submit">Add Billing</button>
+      </form>
+      <h2>Billings</h2>
+      <ul>
+        {billings.map((billing,index) => (
+          <li key={index}>
+            {billing.item} - ${billing.amount}
+            <button onClick={() => handleDelete(billing._id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+      <h3>Total Items: {totalItems}</h3>
+      <h3>Total Price: ${totalPrice}</h3>
+    </div>
+  );
+};
+
+export default App;
+//end app page billings
+//
