@@ -1,0 +1,138 @@
+**
+import express from 'express';
+import mongoose from 'mongoose';
+import Blogs from './Blogs.mjs';
+import cors from 'cors';
+const server = express();
+server.use(express.json());
+server.use(cors());
+mongoose.connect("mongodb://localhost:27017/Assignment22");
+server.use("/api", Blogs);
+server.listen(3000, () => {
+    console.log("Server running at 3000");
+})
+//end server
+//
+
+**
+import mongoose from "mongoose";
+const BlogSchema = new mongoose.Schema({
+    title: String,
+    blog: String
+});
+export default mongoose.model("BlogSchema",BlogSchema);
+//end model Schema
+//
+
+**
+import express from 'express';
+import BlogSchema from './BlogSchema.mjs';
+const Blogs = express.Router();
+Blogs.get('/getAll', async (req, res) => {
+    const blogs = await BlogSchema.find();
+    res.json(blogs);
+});
+
+// Create a new blog
+Blogs.post('/add', async (req, res) => {
+    const newBlog = new BlogSchema(req.body);
+    await newBlog.save();
+    res.status(201).json(newBlog);
+});
+
+// Delete a blog
+Blogs.delete('/delete/:id', async (req, res) => {
+    const deleteData = await BlogSchema.findByIdAndDelete(req.params.id);
+    res.status(204).send(deleteData);
+});
+export default Blogs;
+//end apis
+//
+
+**
+// P1BlogApp.js
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import BlogList from './BlogList';
+
+const BlogApp = () => {
+    const [data, setData] = useState([]);
+    const [title, setTitle] = useState("");
+    const [blog, setBlog] = useState("");
+
+    useEffect(() => {
+        fetchBlogs();
+    }, []);
+
+    const fetchBlogs = async () => {
+        const response = await axios.get('http://localhost:3000/api/getAll');
+        setData(response.data);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const newBlog = { title, blog };
+        await axios.post('http://localhost:3000/api/add', newBlog);
+        fetchBlogs();
+        setTitle("");
+        setBlog("");
+    };
+
+    const handleDelete = async (id) => {
+        await axios.delete(`http://localhost:3000/api/delete/${id}`);
+        fetchBlogs();
+    };
+
+    return (
+        <>
+            <div style={{ border: "2px solid red", margin: "5px auto", width: "500px" }}>
+                <div style={{ border: "2px solid blue", margin: "15px auto", width: "300px" }}>
+                    <div style={{ padding: "10px", alignItems: "center", margin: "10px", backgroundColor: "bisque", borderRadius: "10px" }}>
+                        <form onSubmit={handleSubmit} style={{ alignTracks: "center", textAlign: "center" }}>
+                            <label>Title:</label>
+                            <input type="text" name='title' value={title} onChange={(e) => setTitle(e.target.value)} />
+                            <br />
+                            <label>Blog</label>
+                            <input type='text' name='blog' value={blog} onChange={(e) => setBlog(e.target.value)} />
+                            <br />
+                            <div style={{ border: "1px solid yellow", textAlign: "center" }}>
+                                <button type='submit'>Save</button>
+                            </div>
+                        </form>
+                    </div>
+                    <BlogList data={data} onDelete={handleDelete} />
+                </div>
+            </div>
+        </>
+    );
+};
+
+export default BlogApp;
+//end frontend form add 
+//
+
+
+**
+import React from 'react';
+
+const BlogList = ({ data, onDelete }) => {
+    return (
+        <>
+            <ul>
+                {data.map((obj) => (
+                    <li key={obj._id}>
+                        <strong>{obj.title}</strong>
+                        <p>{obj.blog}</p>
+                        <button onClick={() => onDelete(obj._id)}>Delete</button>
+                    </li>
+                ))}
+            </ul>
+        </>
+    );
+};
+
+//export default BlogList;
+//end list of blog
+
+**
+
