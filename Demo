@@ -1,1 +1,251 @@
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import Products from './Products.mjs';
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+mongoose.connect('mongodb://localhost:27017/shopping_cart', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log('Connected to MongoDB');
+}).catch(err => console.log(err));
+
+app.use('/api',Products);
+
+
+app.listen(6001, () => {
+  console.log('Server running on port 6001');
+});
+
+
+
+import mongoose from "mongoose";
+
+const ProductSchema = new mongoose.Schema({
+    name: String,
+    price: Number,
+    image: String,
+});
+export default mongoose.model("Product", ProductSchema);
+
+
+
+
+import express from 'express';
+import ProductSchema from './ProductSchema.mjs';
+const Products = express.Router();
+
+Products.get('/products', async (req, res) => {
+    const products = await ProductSchema.find();
+    res.json(products);
+});
+
+Products.post('/add-product', async (req, res) => {
+    const { name, price, image } = req.body;
+    const product = new ProductSchema({ name, price, image });
+    await product.save();
+    res.json(product);
+});
+
+Products.post('/update-cart', async (req, res) => {
+    const { id, quantity } = req.body;
+    // Update the quantity of the item in the cart based on the product's id
+    await ProductSchema.updateOne({ _id: id }, { $inc: { quantity: quantity } });
+    res.json({ message: 'Quantity updated' });
+});
+
+Products.post('/remove-from-cart', async (req, res) => {
+    const { id } = req.body;
+    // Remove item from cart collection (or set quantity to 0 in product schema)
+    await ProductSchema.deleteOne({ _id: id });
+    res.json({ message: 'Item removed from cart' });
+});
+
+export default Products;
+
+
+
+
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import CartList from './CartList';
+import './ShoppingList.css';
+
+const ShopingList = () => {
+    const [items, setItems] = useState([]);
+    const [cart, setCart] = useState([]);
+    const [flag, setFlag] = useState(false);
+
+    // Fetch products from the backend
+    useEffect(() => {
+        axios.get('http://localhost:6001/api/products')
+            .then(response => {
+                setItems(response.data);
+            })
+            .catch(error => {
+                console.error('Error fetching the products:', error);
+            });
+    }, []);
+
+    const addToCart = (item) => {
+        console.log('Add to cart', item);
+        const check = cart.find((data) => data.id === item._id);
+        if (check) {
+            setCart(
+                cart.map((obj) =>
+                    obj.id === item._id ? { ...obj, quantity: obj.quantity + 1 } : obj
+                )
+            );
+        } else {
+            setCart([...cart, { ...item, quantity: 1 }]);
+        }
+    };
+
+    const showData = () => {
+        setFlag(!flag);
+    };
+
+    return (
+        <div className="container">
+            <div className="header">
+                <h1>Shopping</h1>
+                <button onClick={showData} className="cart-button">
+                    Cart List {cart.length}
+                </button>
+            </div>
+            <div className="items-container">
+                {items.map((obj) => (
+                    <div key={obj._id} className="item-card">
+                        <img src={`${process.env.PUBLIC_URL}/img/${obj.image}`} alt={obj.name} />
+                        <p>{obj.name}</p>
+                        <p>₹{obj.price}</p>
+                        <button onClick={() => addToCart(obj)} className="add-to-cart-button">
+                            Add to cart
+                        </button>
+                    </div>
+                ))}
+            </div>
+            {flag && <CartList flag={flag} setFlag={setFlag} cart={cart} setCart={setCart} />}
+        </div>
+    );
+};
+export default ShopingList
+
+
+
+
+import React from 'react';
+import axios from 'axios';
+import './CartList.css';
+
+const CartList = (props) => {
+    // Close the cart
+    const cartClose = () => {
+        props.setFlag(false);
+    };
+
+    // Increase quantity of a product
+    const increseQuantity = (id) => {
+        // Update the cart locally
+        props.setCart(
+            props.cart.map((obj) => obj._id === id ? {...obj, quantity: obj.quantity + 1} : obj)
+        );
+        
+        // Send quantity update to backend
+        axios.post('http://localhost:6001/update-cart', {
+            id: id,
+            quantity: 1 // Increment by 1
+        }).then(response => {
+            console.log('Quantity increased:', response.data);
+        }).catch(error => {
+            console.error('Error increasing quantity:', error);
+        });
+    };
+
+    // Decrease quantity of a product
+    const decreseQuantity = (id) => {
+        const updatedCart = props.cart.map((obj) => obj._id === id ? {...obj, quantity: obj.quantity - 1} : obj);
+        props.setCart(updatedCart.filter((obj) => obj.quantity > 0)); // Remove items with zero quantity
+
+        // Send quantity update to backend
+        axios.post('http://localhost:6001/update-cart', {
+            id: id,
+            quantity: -1 // Decrement by 1
+        }).then(response => {
+            console.log('Quantity decreased:', response.data);
+        }).catch(error => {
+            console.error('Error decreasing quantity:', error);
+        });
+    };
+
+    // Calculate total quantity and price
+    const totalQuantity = props.cart.reduce((acc, item) => acc + item.quantity, 0);
+    const totalPrice = props.cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+    // Remove an item from the cart
+    const removeItem = (id) => {
+        props.setCart(props.cart.filter((obj) => obj._id !== id));
+
+        // Send request to backend to remove item from cart
+        axios.post('http://localhost:6001/remove-from-cart', { id: id })
+            .then(response => {
+                console.log('Item removed:', response.data);
+            })
+            .catch(error => {
+                console.error('Error removing item:', error);
+            });
+    };
+
+    return (
+        <div className="cart-list-container">
+            <h1>List of Cart</h1>
+            <button onClick={cartClose} className="close-cart-button">
+                Close Cart
+            </button>
+
+            {props.cart.length > 0 ? (
+                <>
+                    <div className="cart-summary">
+                        <p>Total Products: {totalQuantity}</p>
+                        <p>Total Price: ₹{totalPrice.toFixed(2)}</p>
+                    </div>
+
+                    {props.cart.map((obj) => (
+                        <div key={obj._id} className="cart-item">
+                            <img src={`${process.env.PUBLIC_URL}/img/${obj.image}`} alt={obj.name} className="cart-item-image" />
+                            
+                            <div className="cart-item-details">
+                                <p className="cart-item-name">{obj.name}</p>
+                                <p className="cart-item-price">₹{obj.price}</p>
+                            </div>
+
+                            <div className="cart-item-quantity">
+                                <p>₹{obj.price * obj.quantity}</p>
+                                <button className="quantity-button" onClick={() => decreseQuantity(obj._id)}>-</button>
+                                <p className="quantity-text">{obj.quantity}</p>
+                                <button className="quantity-button" onClick={() => increseQuantity(obj._id)}>+</button>
+                            </div>
+
+                            <div className="cart-item-actions">
+                                <button className="remove-button" onClick={() => removeItem(obj._id)}>REMOVE</button>
+                            </div>
+                        </div>
+                    ))}
+                </>
+            ) : (
+                <p>Your cart is empty.</p>
+            )}
+        </div>
+    );
+};
+
+export default CartList;
+
+
+
 
